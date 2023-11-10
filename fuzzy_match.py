@@ -29,6 +29,46 @@ paras = data['paragraphs'][0]
 qas, context = paras['qas'], paras['context']
 
 # %%
+def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None):
+    if big_stride == None:
+        big_stride = len(context)//15
+    if small_stride == None:
+        small_stride = len(answer)//5
+    
+    # Split context into overlapping sections of len(context)//10 and stride len(context)//15
+    window_size = len(context)//10
+    best_ratio = 0
+    start_inds = list(range(0,len(context) - window_size + 1, big_stride))
+    for i in start_inds[:-1]:
+        sub_window = context[i:i+window_size]
+        window_ratio = fuzz.partial_ratio(sub_window, answer)
+        
+        if window_ratio > best_ratio:
+            best_ratio = window_ratio
+            best_window = sub_window
+            
+    sub_window = context[start_inds[-1]:]
+    window_ratio = fuzz.partial_ratio(sub_window, answer)
+    if window_ratio > best_ratio:
+        best_ratio = window_ratio
+        best_window = sub_window
+        
+    la = len(answer)
+    window_size = la + 10
+    best_ratio = 0
+    frs = []
+
+    for start in range(0,len(best_window)-window_size+1, small_stride):
+        context_string = best_window[start:start+window_size]
+        window_ratio = fuzz.partial_ratio(context_string, answer)
+        
+        if window_ratio > best_ratio:
+            best_ratio = window_ratio
+            best_sub_window = context_string
+
+    return best_sub_window
+
+
 def binary_search_fuzzy(context, answer):
     start = 0
     end = len(context)
@@ -38,7 +78,10 @@ def binary_search_fuzzy(context, answer):
     left_ratios = []
     right_ratios = []
     
-    while (end - start > 1.6*len(answer)):
+    depth = 0
+    
+    while (end - start > 1.6*len(answer)) and (depth < 100):
+        depth += 1
         mid = (start+end)//2
         left = context[start:mid]
         right = context[mid:end]
@@ -64,7 +107,6 @@ def binary_search_fuzzy(context, answer):
     return (left_ratios, right_ratios, start, context[start:end])
 
 
-# %%
 def cut_window(window, answer, answer_words):
     thres = 70
     answer_words = answer.split()
@@ -78,7 +120,6 @@ def cut_window(window, answer, answer_words):
             if fuzz.partial_ratio(answer, window[start:start + len(answer)]) > thres:
                 return (start, start + len(answer))
 
-# %%
 def search_phrase(phrase, csv_data):
     start_index = concatenated_string.index(phrase)
     end_index = start_index + len(phrase)
@@ -113,12 +154,28 @@ for qNumber in range(0, 22):
             target_string_words = target_string.split(" ")
             cut_res = cut_window(window, target_string, target_string_words)
             if cut_res is None:
-                print(f"Question {qNumber}, Answer {j} Unsuccessful")
-            else:
-                start = cut_res[0]
-                end = cut_res[1]
-                window_subsection = window[start:end]
-                csv_data = search_phrase(window_subsection, csv_data)
+                print(f"Question {qNumber}, Answer {j} Unsuccessful with Binary, trying out Linear")
+                window = linear_search_fuzzy(concatenated_string, target_string)
+                cut_res = cut_window(window, target_string, target_string_words)
+                
+                big_stride = len(concatenated_string)//15
+                small_stride = len(target_string)//5
+                
+                while cut_res is None:
+                    print('Stride too big, trying with smaller stride')
+                    big_stride = big_stride//2
+                    small_stride = small_stride//2
+                    if small_stride == 1:
+                        cut_res = [0,len(window)-1]
+                        break
+                    window = linear_search_fuzzy(concatenated_string, target_string, big_stride, small_stride)
+                    cut_res = cut_window(window, target_string, target_string_words)
+                
+
+            start = cut_res[0]
+            end = cut_res[1]
+            window_subsection = window[start:end]
+            csv_data = search_phrase(window_subsection, csv_data)
 
 # %%
 qNumber = 6
