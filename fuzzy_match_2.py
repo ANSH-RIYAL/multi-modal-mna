@@ -45,12 +45,12 @@ def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None)
         best_window = sub_window
         
     la = len(answer)
-    window_size = la + 10
+    window_size = la
     best_ratio = 0
     frs = []
 
     for start in range(0,len(best_window)-window_size+1, small_stride):
-        context_string = best_window[start:start+window_size]
+        context_string = best_window[start - len(answer)//4 : start+window_size + len(answer)//4]
         window_ratio = fuzz.partial_ratio(context_string, answer)
         
         if window_ratio > best_ratio:
@@ -99,17 +99,35 @@ def binary_search_fuzzy(context, answer):
 
 
 def cut_window(window, answer, answer_words):
-    thres = 70
+    thres = 90
     answer_words = answer.split()
     for i in range(len(answer_words)):
         word = answer_words[i]
         ind = window.find(word)
+        flag = False
         if ind != -1:
             start = ind
             for j in range(i):
                 start -= len(answer_words[j]) + 1
-            if fuzz.partial_ratio(answer, window[start:start + len(answer)]) > thres:
-                return (start, start + len(answer))
+            if fuzz.partial_ratio(answer, window[start:start + len(answer) + 10]) > thres:
+                flag = True
+                break
+        if flag == True:
+            break
+    best_ratio = 0
+    # answer_words = answer[::-1].split()
+    # for i in range(len(answer_words)):
+    #     word = answer_words[i]
+    #     ind = window[::-1].find(word)
+    #     if ind != -1:
+    #         current_end = ind
+    #         for j in range(i):
+    #             current_end -= len(answer_words[j]) + 1
+    #         if fuzz.ratio(answer, window[start : len(answer)-current_end-1]) > best_ratio:
+    #             best_ratio = fuzz.ratio(answer, window[start : len(answer)-current_end-1])
+    #             end = current_end
+    # return start, len(answer)-end-1
+    return start, start + int(len(answer)*1.1)
 
 def search_phrase(phrase, csv_data, qNumber):
     start_index = concatenated_string.index(phrase)
@@ -131,7 +149,7 @@ def search_phrase(phrase, csv_data, qNumber):
     
 # %%
 stt = time.time()
-contract_idx = 2
+contract_idx = 0
 nw=[]
 json_file_path = 'maud_squad_train.json'
 with open(json_file_path, 'r') as json_file:
@@ -141,7 +159,7 @@ csv_data = pd.read_csv(f'./contracts/train/{contract_num}.csv')
 concatenated_string = " ".join(csv_data["text"])
 concatenated_string = concatenated_string.replace("\xa0", " ")
 print(contract_num)
-for qNumber in range(0, 22):
+for qNumber in range(10, 11):
     print("Q.No ", qNumber)
     target_contract_question = json_data['data'][contract_idx]['paragraphs'][0]['qas'][qNumber]
     contract_num = json_data["data"][contract_idx]['title']
@@ -150,6 +168,7 @@ for qNumber in range(0, 22):
         for j in range(len(answers)):
             target_string = answers[j]["text"]
             lrs, rrs, start, window = binary_search_fuzzy(concatenated_string, target_string)
+            
             target_string_words = target_string.split(" ")
             cut_res = cut_window(window, target_string, target_string_words)
             if cut_res is None:
@@ -176,14 +195,18 @@ for qNumber in range(0, 22):
             start = cut_res[0]
             end = cut_res[1]
             window_subsection = window[start:end]
+            print(f"The answer is: \n {target_string} \n The Subsection \n {window_subsection} \n The Window is \n {window}")
             csv_data = search_phrase(window_subsection, csv_data, qNumber)
             print(f"\t A.No {j} Done ")
 ett = time.time()
-print(f">Time for contract {contract_num} is {ett-stt}")
-print("Unsucessful answers:")
+print(f"time for contract {contract_num} is {ett-stt}")
+print("Unsucessful answers")
 print(nw)
 # %%
 csv_data.to_csv(f'{contract_num}.csv',index=False, index_label=None)
 # %%
 
 #Contract_idx - not found in directory - [3]
+
+
+# %%
