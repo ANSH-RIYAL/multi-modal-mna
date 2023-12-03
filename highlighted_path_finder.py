@@ -6,18 +6,18 @@ from tqdm import tqdm
 import time
 import json
 import re
-# %%
+# # %%
 
-json_file_path = 'maud_squad_train.json'
+# json_file_path = 'maud_squad_train.json'
 
-with open(json_file_path, 'r') as json_file:
-    # Load and parse the JSON data
-    json_data = json.load(json_file)
+# with open(json_file_path, 'r') as json_file:
+#     # Load and parse the JSON data
+#     json_data = json.load(json_file)
     
-data = json_data['data'][0]
-title = data['title']
-paras = data['paragraphs'][0]
-qas, context = paras['qas'], paras['context']
+# data = json_data['data'][0]
+# title = data['title']
+# paras = data['paragraphs'][0]
+# qas, context = paras['qas'], paras['context']
 
 # %%
 def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None):
@@ -45,12 +45,12 @@ def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None)
         best_window = sub_window
         
     la = len(answer)
-    window_size = la
+    window_size = la + 10
     best_ratio = 0
     frs = []
 
     for start in range(0,len(best_window)-window_size+1, small_stride):
-        context_string = best_window[start - len(answer)//4 : start+window_size + len(answer)//4]
+        context_string = best_window[start:start+window_size]
         window_ratio = fuzz.partial_ratio(context_string, answer)
         
         if window_ratio > best_ratio:
@@ -99,35 +99,36 @@ def binary_search_fuzzy(context, answer):
 
 
 def cut_window(window, answer, answer_words):
-    thres = 90
+    thres = 70
     answer_words = answer.split()
     for i in range(len(answer_words)):
         word = answer_words[i]
         ind = window.find(word)
-        flag = False
         if ind != -1:
             start = ind
             for j in range(i):
                 start -= len(answer_words[j]) + 1
-            if fuzz.partial_ratio(answer, window[start:start + len(answer) + 10]) > thres:
-                flag = True
-                break
-        if flag == True:
-            break
-    best_ratio = 0
-    # answer_words = answer[::-1].split()
-    # for i in range(len(answer_words)):
-    #     word = answer_words[i]
-    #     ind = window[::-1].find(word)
-    #     if ind != -1:
-    #         current_end = ind
-    #         for j in range(i):
-    #             current_end -= len(answer_words[j]) + 1
-    #         if fuzz.ratio(answer, window[start : len(answer)-current_end-1]) > best_ratio:
-    #             best_ratio = fuzz.ratio(answer, window[start : len(answer)-current_end-1])
-    #             end = current_end
-    # return start, len(answer)-end-1
-    return start, start + int(len(answer)*1.1)
+            if fuzz.partial_ratio(answer, window[start:start + len(answer)]) > thres:
+                return (start, start + len(answer))
+
+def lcs(S,T):
+    m = len(S)
+    n = len(T)
+    counter = [[0]*(n+1) for x in range(m+1)]
+    longest = 0
+    lcs_set = set()
+    for i in range(m):
+        for j in range(n):
+            if S[i] == T[j]:
+                c = counter[i][j] + 1
+                counter[i+1][j+1] = c
+                if c > longest:
+                    lcs_set = set()
+                    longest = c
+                    lcs_set.add(S[i-c+1:i+1])
+                elif c == longest:
+                    lcs_set.add(S[i-c+1:i+1])
+    return str(lcs_set)[2:-2]
 
 def search_phrase(phrase, csv_data, qNumber):
     start_index = concatenated_string.index(phrase)
@@ -142,7 +143,7 @@ def search_phrase(phrase, csv_data, qNumber):
             corresponding_indices.append(idx)
             csv_data.loc[csv_data.index==idx, 'tagged_sequence'] = f"a__q{qNumber+1}"
             csv_data.loc[csv_data.index==idx, 'highlighted_xpaths'] = csv_data.loc[csv_data.index==idx, 'xpaths']
-            csv_data.loc[csv_data.index==idx, 'highlighted_segmented_text'] = csv_data.loc[csv_data.index==idx, 'text']
+            csv_data.loc[csv_data.index==idx, 'highlighted_segmented_text'] = LCSubStr(csv_data.loc[csv_data.index==idx, 'text'], phrase)
             if end_index <= len_sum:
                 break
     return csv_data
@@ -151,7 +152,7 @@ def search_phrase(phrase, csv_data, qNumber):
 stt = time.time()
 contract_idx = 0
 nw=[]
-json_file_path = 'maud_squad_train.json'
+json_file_path = 'maud_squad_train_and_dev.json'
 with open(json_file_path, 'r') as json_file:
     json_data = json.load(json_file)
 contract_num = json_data["data"][contract_idx]['title']
@@ -159,7 +160,7 @@ csv_data = pd.read_csv(f'./contracts/train/{contract_num}.csv')
 concatenated_string = " ".join(csv_data["text"])
 concatenated_string = concatenated_string.replace("\xa0", " ")
 print(contract_num)
-for qNumber in range(10, 11):
+for qNumber in range(22):
     print("Q.No ", qNumber)
     target_contract_question = json_data['data'][contract_idx]['paragraphs'][0]['qas'][qNumber]
     contract_num = json_data["data"][contract_idx]['title']
@@ -203,10 +204,5 @@ print(f"time for contract {contract_num} is {ett-stt}")
 print("Unsucessful answers")
 print(nw)
 # %%
-csv_data.to_csv(f'{contract_num}.csv',index=False, index_label=None)
-# %%
-
-#Contract_idx - not found in directory - [3]
-
-
-# %%
+csv_data.to_csv(f'contracts/generated_csv/{contract_num}.csv',index=False, index_label=None)
+print("New CSV Generated in the contracts/generated_csv folder. You can use it to visualize")
