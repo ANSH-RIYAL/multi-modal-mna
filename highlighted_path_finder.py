@@ -6,18 +6,7 @@ from tqdm import tqdm
 import time
 import json
 import re
-# # %%
-
-# json_file_path = 'maud_squad_train.json'
-
-# with open(json_file_path, 'r') as json_file:
-#     # Load and parse the JSON data
-#     json_data = json.load(json_file)
-    
-# data = json_data['data'][0]
-# title = data['title']
-# paras = data['paragraphs'][0]
-# qas, context = paras['qas'], paras['context']
+import argparse
 
 # %%
 def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None):
@@ -63,33 +52,33 @@ def linear_search_fuzzy(context, answer, big_stride = None, small_stride = None)
 def binary_search_fuzzy(context, answer):
     start = 0
     end = len(context)
-    
+
     thres = 90
-    
+
     left_ratios = []
     right_ratios = []
-    
+
     depth = 0
-    
+
     while (end - start > 1.6*len(answer)) and (depth < 100):
         depth += 1
         mid = (start+end)//2
         left = context[start:mid]
         right = context[mid:end]
-        
+
         left_ratio = fuzz.partial_ratio(left, answer)
         right_ratio = fuzz.partial_ratio(right, answer)
-        
+
         left_ratios.append(left_ratio)
         right_ratios.append(right_ratio)
-        
+
         # If we found the window
         if left_ratio - right_ratio > thres:
             return (left_ratios, right_ratios, start, left)
-        
+
         elif right_ratio - left_ratio > thres:
             return (left_ratios, right_ratios, mid, right)
-        
+
         # Left half vs Right half
         if left_ratio > right_ratio:
             end = mid + len(answer)//2 + 10
@@ -108,27 +97,28 @@ def cut_window(window, answer, answer_words):
             start = ind
             for j in range(i):
                 start -= len(answer_words[j]) + 1
-            if fuzz.partial_ratio(answer, window[start:start + len(answer)]) > thres:
+            if fuzz.ratio(answer, window[start:start + len(answer)]) > thres:
                 return (start, start + len(answer))
 
-def lcs(S,T):
-    m = len(S)
-    n = len(T)
-    counter = [[0]*(n+1) for x in range(m+1)]
-    longest = 0
-    lcs_set = set()
-    for i in range(m):
-        for j in range(n):
-            if S[i] == T[j]:
-                c = counter[i][j] + 1
-                counter[i+1][j+1] = c
-                if c > longest:
-                    lcs_set = set()
-                    longest = c
-                    lcs_set.add(S[i-c+1:i+1])
-                elif c == longest:
-                    lcs_set.add(S[i-c+1:i+1])
-    return str(lcs_set)[2:-2]
+def longest_common_substring(str1, str2):
+    m, n = len(str1), len(str2)
+    # Create a table to store the length of the common substring
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    max_length = 0  # To keep track of the maximum length found
+    end_index = 0  # To keep track of the ending index of the longest common substring
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if str1[i - 1] == str2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+                if dp[i][j] > max_length:
+                    max_length = dp[i][j]
+                    end_index = i
+
+    # Extract the longest common substring from str1
+    longest_substring = str1[end_index - max_length:end_index]
+
+    return longest_substring
 
 def search_phrase(phrase, csv_data, qNumber):
     start_index = concatenated_string.index(phrase)
@@ -143,14 +133,21 @@ def search_phrase(phrase, csv_data, qNumber):
             corresponding_indices.append(idx)
             csv_data.loc[csv_data.index==idx, 'tagged_sequence'] = f"a__q{qNumber+1}"
             csv_data.loc[csv_data.index==idx, 'highlighted_xpaths'] = csv_data.loc[csv_data.index==idx, 'xpaths']
-            csv_data.loc[csv_data.index==idx, 'highlighted_segmented_text'] = LCSubStr(csv_data.loc[csv_data.index==idx, 'text'], phrase)
+            csv_data.loc[csv_data.index==idx, 'highlighted_segmented_text'] = csv_data.loc[csv_data.index==idx, 'text']
             if end_index <= len_sum:
                 break
     return csv_data
-    
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Process contract index.')
+parser.add_argument('--contract_idx', type=int, help='Index of the contract to process')
+args = parser.parse_args()
+
+# Now use args.contract_idx in your script
+contract_idx = args.contract_idx
+
 # %%
 stt = time.time()
-contract_idx = 0
 nw=[]
 json_file_path = 'maud_squad_train_and_dev.json'
 with open(json_file_path, 'r') as json_file:
@@ -196,7 +193,7 @@ for qNumber in range(22):
             start = cut_res[0]
             end = cut_res[1]
             window_subsection = window[start:end]
-            print(f"The answer is: \n {target_string} \n The Subsection \n {window_subsection} \n The Window is \n {window}")
+            print(f"The answer is: \n {target_string} \n The Subsection \n {window_subsection} \n")
             csv_data = search_phrase(window_subsection, csv_data, qNumber)
             print(f"\t A.No {j} Done ")
 ett = time.time()
@@ -206,3 +203,4 @@ print(nw)
 # %%
 csv_data.to_csv(f'contracts/generated_csv/{contract_num}.csv',index=False, index_label=None)
 print("New CSV Generated in the contracts/generated_csv folder. You can use it to visualize")
+# %%
